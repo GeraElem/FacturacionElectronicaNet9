@@ -1,0 +1,15 @@
+﻿<?xml version='1.0' encoding='utf-8'?>
+<SettingsFile xmlns="http://schemas.microsoft.com/VisualStudio/2004/01/settings" CurrentProfile="(Default)" GeneratedClassNamespace="FacturaElectronicaProd.Properties" GeneratedClassName="Settings">
+  <Profiles />
+  <Settings>
+    <Setting Name="FacturaElectronica_WSAA_LoginCMSService" Type="(Web Service URL)" Scope="Application">
+      <Value Profile="(Default)">https://wsaa.afip.gov.ar/ws/services/LoginCms</Value>
+    </Setting>
+    <Setting Name="FacturaElectronica_WSFEV1_Service" Type="(Web Service URL)" Scope="Application">
+      <Value Profile="(Default)">https://wswhomo.afip.gov.ar/wsfev1/service.asmx</Value>
+    </Setting>
+    <Setting Name="FacturaElectronicaProd_Padron_PersonaServiceA5" Type="(Web Service URL)" Scope="Application">
+      <Value Profile="(Default)">https://aws.afip.gov.ar/sr-padron/webservices/personaServiceA5</Value>
+    </Setting>
+  </Settings>
+</SettingsFile>

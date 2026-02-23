@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Framework moderno -->
+    <TargetFramework>net9.0</TargetFramework>
+
+    <!-- Es una librería -->
+    <OutputType>Library</OutputType>
+
+    <!-- Opcional pero recomendado -->
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <!-- Paquetes necesarios SOLO si usás SOAP / WCF -->
+  <ItemGroup>
+    <PackageReference Include="System.ServiceModel.Http" Version="8.0.0" />
+    <PackageReference Include="System.ServiceModel.Primitives" Version="8.0.0" />
+    <PackageReference Include="System.ServiceModel.Security" Version="8.0.0" />
+  </ItemGroup>
+
+</Project>
