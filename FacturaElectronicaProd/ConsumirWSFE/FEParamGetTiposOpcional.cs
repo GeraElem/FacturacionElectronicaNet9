@@ -1,87 +1,122 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using System.Net;
+using System.ServiceModel;
 using FacturaElectronicaProd.ConsumirWSFE.ClasesRequest;
 using FacturaElectronicaProd.ConsumirWSFE.ClasesResponse;
+using FacturaElectronicaProd.ServiceReference2;
+using Microsoft.Extensions.Configuration;
 
 namespace FacturaElectronicaProd.ConsumirWSFE
 {
     public class FEParamGetTiposOpcional
     {
-        string strUrlWsfev1 = (System.Configuration.ConfigurationManager.AppSettings["AFIP"] == "P" ? "https://servicios1.afip.gov.ar/wsfev1/service.asmx?WSDL" : "https://wswhomo.afip.gov.ar/wsfev1/service.asmx?WSDL"); //produccion
-        WSFEV1.Service servicioCompAut; //objeto para solicitar el servicio wsfe
-        TicketAcceso acceso = new TicketAcceso();
-        //objetos solicitados por el método FEParamGetTiposOpcional
-        WSFEV1.FEAuthRequest auth;
-        WSFEV1.OpcionalTipoResponse response;
-        OpcionalTipoResponse respuesta;
+        private readonly IConfiguration _configuration;
+        private readonly string ambiente;
+        private readonly string strUrlWsfev1;
 
-        public OpcionalTipoResponse obenerOpcionales(string pathXml = null, string pathCertificado = null)
+        private ServiceSoapClient servicioCompAut;
+        private readonly TicketAcceso acceso;
+
+        // AFIP
+        private FEAuthRequest auth;
+        private FEParamGetTiposOpcionalResponse response;
+
+        // DTO propio
+        private ClasesResponse.OpcionalTipoResponse respuesta;
+
+        public FEParamGetTiposOpcional(IConfiguration configuration)
+        {
+            _configuration = configuration;
+
+            ambiente = _configuration.GetValue<string>("AFIP");
+
+            strUrlWsfev1 = ambiente == "P"
+                ? "https://servicios1.afip.gov.ar/wsfev1/service.asmx?WSDL"
+                : "https://wswhomo.afip.gov.ar/wsfev1/service.asmx?WSDL";
+
+            acceso = new TicketAcceso(configuration);
+        }
+
+        public ClasesResponse.OpcionalTipoResponse ObtenerOpcionales(
+            string pathXml = null,
+            string pathCertificado = null)
         {
             try
             {
-                //solicito objeto de autenticación
+                // 1️⃣ Autenticación
                 auth = acceso.ObtenerCredencialesTA(pathXml, pathCertificado);
 
-                //ejecuto el método compUltimoAutorizado del servicio
                 try
                 {
-                    servicioCompAut = new WSFEV1.Service();
-                    servicioCompAut.Url = strUrlWsfev1;
-                    //guardo el contenido de la respuesta
-                    response = servicioCompAut.FEParamGetTiposOpcional(auth);
-                }
-                catch (Exception excepcionAlInvocarWsaa)
-                {
-                    throw new Exception("***Error INVOCANDO al servicio WSFE : " + excepcionAlInvocarWsaa.Message);
-                }
+                    // 2️⃣ Cliente WCF con endpoint dinámico
+                    var endpoint = new EndpointAddress(strUrlWsfev1);
 
-                //creo el objeto a devolver
-                respuesta = new OpcionalTipoResponse();
+                    servicioCompAut = new ServiceSoapClient(
+                        ServiceSoapClient.EndpointConfiguration.ServiceSoap,
+                        endpoint
+                    );
 
-                //respuesta errores si no es nulo
-                if (response.Errors != null)
+                    ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+
+                    // 3️⃣ Llamada al WS
+                    response = servicioCompAut
+                        .FEParamGetTiposOpcionalAsync(auth)
+                        .GetAwaiter()
+                        .GetResult();
+                }
+                catch (Exception ex)
                 {
-                    respuesta.errores = new ErroresResponse[response.Errors.Length];
-                    for (int i = 0; i < response.Errors.Length; i++)
-                    {
-                        respuesta.errores[i] = new ErroresResponse();
-                        respuesta.errores[i].code = response.Errors[i].Code;
-                        respuesta.errores[i].msg = response.Errors[i].Msg;
-                    }
+                    throw new Exception(
+                        "***Error INVOCANDO al servicio FEParamGetTiposOpcional : " + ex.Message);
                 }
 
-                //respuesta eventos si no es nulo
-                if (response.Events != null)
+                // 4️⃣ Mapeo a DTO propio
+                respuesta = new ClasesResponse.OpcionalTipoResponse();
+
+                var result = response.Body.FEParamGetTiposOpcionalResult;
+
+                // errores
+                if (result.Errors != null)
                 {
-                    respuesta.eventos = new EventosResponse[response.Events.Length];
-                    for (int i = 0; i < response.Events.Length; i++)
-                    {
-                        respuesta.eventos[i] = new EventosResponse();
-                        respuesta.eventos[i].code = response.Events[i].Code;
-                        respuesta.eventos[i].msg = response.Events[i].Msg;
-                    }
+                    respuesta.errores = result.Errors
+                        .Select(e => new ErroresResponse
+                        {
+                            code = e.Code,
+                            msg = e.Msg
+                        })
+                        .ToArray();
                 }
 
-                //opciones
-                if (response.ResultGet != null)
+                // eventos
+                if (result.Events != null)
                 {
-                    respuesta.opciones = new OpcionalRequest[response.ResultGet.Length];
-                    for (int i = 0; i < response.ResultGet.Length; i++)
-                    {
-                        respuesta.opciones[i] = new OpcionalRequest();
-                        respuesta.opciones[i].id = response.ResultGet[i].Id;
-                        respuesta.opciones[i].valor = response.ResultGet[i].Desc;
-                    }
+                    respuesta.eventos = result.Events
+                        .Select(e => new EventosResponse
+                        {
+                            code = e.Code,
+                            msg = e.Msg
+                        })
+                        .ToArray();
+                }
+
+                // opciones
+                if (result.ResultGet != null)
+                {
+                    respuesta.opciones = result.ResultGet
+                        .Select(o => new OpcionalRequest
+                        {
+                            id = o.Id,
+                            valor = o.Desc
+                        })
+                        .ToArray();
                 }
 
                 return respuesta;
             }
-            catch (Exception ex)
+            catch
             {
-                throw ex;
+                throw;
             }
         }
     }

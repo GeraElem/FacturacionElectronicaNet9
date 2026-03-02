@@ -26,11 +26,13 @@ namespace FacturaElectronicaProd.ConsumirWSFE
             strUrlWsfev1 = ambiente == "P"
                 ? "https://servicios1.afip.gov.ar/wsfev1/service.asmx?WSDL"
                 : "https://wswhomo.afip.gov.ar/wsfev1/service.asmx?WSDL";
+
+            acceso = new TicketAcceso(configuration);
         }
 
         //string strUrlWsfev1 = (System.Configuration.ConfigurationManager.AppSettings["AFIP"] == "P" ? "https://servicios1.afip.gov.ar/wsfev1/service.asmx?WSDL" : "https://wswhomo.afip.gov.ar/wsfev1/service.asmx?WSDL"); //produccion
         ServiceSoapClient servicioCompCons;        //objeto para solicitar el servicio wsfe
-        TicketAcceso acceso = new TicketAcceso();
+        private readonly TicketAcceso acceso;
         //objetos solicitados por el método FECompConsultar
         FEAuthRequest auth;
         ServiceReference2.FECompConsultarResponse response;

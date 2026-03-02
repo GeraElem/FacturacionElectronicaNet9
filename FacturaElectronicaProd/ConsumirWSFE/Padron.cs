@@ -1,6 +1,7 @@
 ﻿using System;
 using System.ServiceModel;
 using FacturaElectronicaProd.ServiceReference2;
+using Microsoft.Extensions.Configuration;
 using PadronService;
 
 namespace FacturaElectronicaProd.ConsumirWSFE
@@ -8,12 +9,16 @@ namespace FacturaElectronicaProd.ConsumirWSFE
     public class Padron
     {
         private readonly PersonaServiceA5Client _cliente;
-        private readonly TicketAcceso _acceso = new TicketAcceso();
+        private readonly TicketAcceso acceso;
 
         private const string strIdServicioNegocio = "ws_sr_constancia_inscripcion";
 
-        public Padron(string urlWs)
+        public Padron(
+            IConfiguration configuration,
+            string urlWs)
         {
+            acceso = new TicketAcceso(configuration);
+
             var endpoint = new EndpointAddress(urlWs);
 
             _cliente = new PersonaServiceA5Client(
@@ -22,12 +27,13 @@ namespace FacturaElectronicaProd.ConsumirWSFE
             );
         }
 
+
         public personaReturn ValidarCuit(long cuit)
         {
             try
             {
                 // 1️⃣ Obtener credenciales WSAA
-                FEAuthRequest auth = _acceso.PadronObtenerCredencialesTA(strIdServicioNegocio);
+                FEAuthRequest auth = acceso.PadronObtenerCredencialesTA(strIdServicioNegocio);
 
                 // 2️⃣ Invocar servicio Padron A5
                 var resultado = _cliente

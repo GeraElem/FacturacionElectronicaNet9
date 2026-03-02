@@ -1,81 +1,73 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Net;
-using System.Text;
-using System.Threading.Tasks;
 using FacturaElectronicaProd.ConsumirWSFE.ClasesResponse;
+using FacturaElectronicaProd.ServiceReference2;
+using Microsoft.Extensions.Configuration;
 
 namespace FacturaElectronicaProd.ConsumirWSFE
 {
     public class UltimoCbteAutorizado
     {
-        string strUrlWsfev1 = (System.Configuration.ConfigurationManager.AppSettings["AFIP"] == "P" ? "https://servicios1.afip.gov.ar/wsfev1/service.asmx?WSDL" : "https://wswhomo.afip.gov.ar/wsfev1/service.asmx?WSDL"); //produccion
-        WSFEV1.Service servicioCompAut; //objeto para solicitar el servicio wsfe
-        TicketAcceso acceso = new TicketAcceso();
-        //objetos solicitados por el método FECAEcompUltimoAutorizado
-        WSFEV1.FEAuthRequest auth;
-        WSFEV1.FERecuperaLastCbteResponse response;
-        CbteAutResponse respuesta;
+        private readonly string strUrlWsfev1 =
+            (System.Configuration.ConfigurationManager.AppSettings["AFIP"] == "P"
+                ? "https://servicios1.afip.gov.ar/wsfev1/service.asmx"
+                : "https://wswhomo.afip.gov.ar/wsfev1/service.asmx");
 
-        public CbteAutResponse obtenerUltimoCbtAut(int ptoVta, int cbteTipo, string pathXml = null, string pathCertificado = null)
+        private ServiceSoapClient servicio;
+        private readonly TicketAcceso acceso;
+
+        public UltimoCbteAutorizado(IConfiguration configuration)
         {
-            try
+            acceso = new TicketAcceso(configuration);
+        }
+
+        public CbteAutResponse obtenerUltimoCbtAut(
+            int ptoVta,
+            int cbteTipo,
+            string pathXml = null,
+            string pathCertificado = null)
+        {
+            // 🔐 auth
+            FEAuthRequest auth = acceso.ObtenerCredencialesTA(pathXml, pathCertificado);
+
+            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+
+            servicio = new ServiceSoapClient(
+                ServiceSoapClient.EndpointConfiguration.ServiceSoap,
+                strUrlWsfev1
+            );
+
+            var response = servicio
+                .FECompUltimoAutorizadoAsync(auth, ptoVta, cbteTipo)
+                .GetAwaiter()
+                .GetResult();
+
+            var result = response.Body.FECompUltimoAutorizadoResult;
+
+            var respuesta = new CbteAutResponse
             {
-                //solicito objeto de autenticación
-                auth = acceso.ObtenerCredencialesTA(pathXml, pathCertificado);
+                cbteNro = result.CbteNro,
+                cbteTipo = result.CbteTipo,
+                ptoVta = result.PtoVta
+            };
 
-                //ejecuto el método compUltimoAutorizado del servicio
-                try
-                {
-                    servicioCompAut = new WSFEV1.Service();
-                    servicioCompAut.Url = strUrlWsfev1;
-                    //guardo el contenido de la respuesta
-                    System.Net.ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
-                    response = servicioCompAut.FECompUltimoAutorizado(auth, ptoVta, cbteTipo);
-                }
-                catch (Exception excepcionAlInvocarWsaa)
-                {
-                    throw new Exception("***Error INVOCANDO al servicio WSFE : " + excepcionAlInvocarWsaa.Message);
-                }
-
-                //creo el objeto a devolver
-                respuesta = new CbteAutResponse();
-
-                //respuesta errores si no es nulo
-                if (response.Errors != null)
-                {
-                    respuesta.errores = new ErroresResponse[response.Errors.Length];
-                    for (int i = 0; i < response.Errors.Length; i++)
-                    {
-                        respuesta.errores[i] = new ErroresResponse();
-                        respuesta.errores[i].code = response.Errors[i].Code;
-                        respuesta.errores[i].msg = response.Errors[i].Msg;
-                    }
-                }
-
-                //respuesta eventos si no es nulo
-                if (response.Events != null)
-                {
-                    respuesta.eventos = new EventosResponse[response.Events.Length];
-                    for (int i = 0; i < response.Events.Length; i++)
-                    {
-                        respuesta.eventos[i] = new EventosResponse();
-                        respuesta.eventos[i].code = response.Events[i].Code;
-                        respuesta.eventos[i].msg = response.Events[i].Msg;
-                    }
-                }
-
-                respuesta.cbteNro = response.CbteNro;
-                respuesta.cbteTipo = response.CbteTipo;
-                respuesta.ptoVta = response.PtoVta;
-
-                return respuesta;
-            }
-            catch (Exception ex)
+            if (result.Errors != null)
             {
-                throw ex;
+                respuesta.errores = Array.ConvertAll(
+                    result.Errors,
+                    e => new ErroresResponse { code = e.Code, msg = e.Msg }
+                );
             }
+
+            if (result.Events != null)
+            {
+                respuesta.eventos = Array.ConvertAll(
+                    result.Events,
+                    e => new EventosResponse { code = e.Code, msg = e.Msg }
+                );
+            }
+
+            return respuesta;
         }
     }
 }

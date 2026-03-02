@@ -1,89 +1,122 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Net;
-using System.Text;
-using System.Threading.Tasks;
+using System.ServiceModel;
 using FacturaElectronicaProd.ConsumirWSFE.ClasesRequest;
 using FacturaElectronicaProd.ConsumirWSFE.ClasesResponse;
+using FacturaElectronicaProd.ServiceReference2;
+using Microsoft.Extensions.Configuration;
 
 namespace FacturaElectronicaProd.ConsumirWSFE
 {
     public class FEParamGetTiposDoc
     {
-        string strUrlWsfev1 = (System.Configuration.ConfigurationManager.AppSettings["AFIP"] == "P" ? "https://servicios1.afip.gov.ar/wsfev1/service.asmx?WSDL" : "https://wswhomo.afip.gov.ar/wsfev1/service.asmx?WSDL"); //produccion
-        WSFEV1.Service servicioCompAut; //objeto para solicitar el servicio wsfe
-        TicketAcceso acceso = new TicketAcceso();
-        //objetos solicitados por el método FEParamGetTiposOpcional
-        WSFEV1.FEAuthRequest auth;
-        WSFEV1.DocTipoResponse response;
-        DocTipoResponse respuesta;
+        private readonly IConfiguration _configuration;
+        private readonly string ambiente;
+        private readonly string strUrlWsfev1;
 
-        public DocTipoResponse obenerDocumentos(string pathXml = null, string pathCertificado = null)
+        public FEParamGetTiposDoc(IConfiguration configuration)
+        {
+            _configuration = configuration;
+
+            ambiente = _configuration.GetValue<string>("AFIP");
+
+            strUrlWsfev1 = ambiente == "P"
+                ? "https://servicios1.afip.gov.ar/wsfev1/service.asmx?WSDL"
+                : "https://wswhomo.afip.gov.ar/wsfev1/service.asmx?WSDL";
+
+            acceso = new TicketAcceso(configuration);
+        }
+
+        private ServiceSoapClient servicioCompAut;
+        private readonly TicketAcceso acceso;
+
+        // objetos AFIP
+        private FEAuthRequest auth;
+        private ServiceReference2.FEParamGetTiposDocResponse response;
+
+        // DTO propio
+        private ClasesResponse.DocTipoResponse respuesta;
+
+        public ClasesResponse.DocTipoResponse ObtenerDocumentos(
+            string pathXml = null,
+            string pathCertificado = null)
         {
             try
             {
-                //solicito objeto de autenticación
+                // 1️⃣ Autenticación
                 auth = acceso.ObtenerCredencialesTA(pathXml, pathCertificado);
 
-                //ejecuto el método compUltimoAutorizado del servicio
                 try
                 {
-                    servicioCompAut = new WSFEV1.Service();
-                    servicioCompAut.Url = strUrlWsfev1;
-                    //guardo el contenido de la respuesta
+                    // 2️⃣ Cliente WCF con endpoint dinámico
+                    var endpoint = new EndpointAddress(strUrlWsfev1);
+
+                    servicioCompAut = new ServiceSoapClient(
+                        ServiceSoapClient.EndpointConfiguration.ServiceSoap,
+                        endpoint
+                    );
+
                     ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
-                    response = servicioCompAut.FEParamGetTiposDoc(auth);
-                }
-                catch (Exception excepcionAlInvocarWsaa)
-                {
-                    throw new Exception("***Error INVOCANDO al servicio FEParamGetTiposDoc : " + excepcionAlInvocarWsaa.Message);
-                }
 
-                //creo el objeto a devolver
-                respuesta = new DocTipoResponse();
-
-                //respuesta errores si no es nulo
-                if (response.Errors != null)
+                    // 3️⃣ Llamada al WS
+                    response = servicioCompAut
+                        .FEParamGetTiposDocAsync(auth)
+                        .GetAwaiter()
+                        .GetResult();
+                }
+                catch (Exception ex)
                 {
-                    respuesta.errores = new ErroresResponse[response.Errors.Length];
-                    for (int i = 0; i < response.Errors.Length; i++)
-                    {
-                        respuesta.errores[i] = new ErroresResponse();
-                        respuesta.errores[i].code = response.Errors[i].Code;
-                        respuesta.errores[i].msg = response.Errors[i].Msg;
-                    }
+                    throw new Exception(
+                        "***Error INVOCANDO al servicio FEParamGetTiposDoc : " + ex.Message);
                 }
 
-                //respuesta eventos si no es nulo
-                if (response.Events != null)
+                // 4️⃣ Mapeo a DTO propio
+                respuesta = new ClasesResponse.DocTipoResponse();
+
+                var result = response.Body.FEParamGetTiposDocResult;
+
+                // errores
+                if (result.Errors != null)
                 {
-                    respuesta.eventos = new EventosResponse[response.Events.Length];
-                    for (int i = 0; i < response.Events.Length; i++)
-                    {
-                        respuesta.eventos[i] = new EventosResponse();
-                        respuesta.eventos[i].code = response.Events[i].Code;
-                        respuesta.eventos[i].msg = response.Events[i].Msg;
-                    }
+                    respuesta.errores = result.Errors
+                        .Select(e => new ErroresResponse
+                        {
+                            code = e.Code,
+                            msg = e.Msg
+                        })
+                        .ToArray();
                 }
 
-                //opciones
-                if (response.ResultGet != null)
+                // eventos
+                if (result.Events != null)
                 {
-                    respuesta.documentos = new DocumentoRequest[response.ResultGet.Length];
-                    for (int i = 0; i < response.ResultGet.Length; i++)
-                    {
-                        respuesta.documentos[i] = new DocumentoRequest();
-                        respuesta.documentos[i].id = response.ResultGet[i].Id;
-                        respuesta.documentos[i].valor = response.ResultGet[i].Desc;
-                    }
+                    respuesta.eventos = result.Events
+                        .Select(e => new EventosResponse
+                        {
+                            code = e.Code,
+                            msg = e.Msg
+                        })
+                        .ToArray();
+                }
+
+                // documentos
+                if (result.ResultGet != null)
+                {
+                    respuesta.documentos = result.ResultGet
+                        .Select(d => new DocumentoRequest
+                        {
+                            id = d.Id,
+                            valor = d.Desc
+                        })
+                        .ToArray();
                 }
 
                 return respuesta;
             }
-            catch (Exception ex)
+            catch
             {
-                throw ex;
+                throw;
             }
         }
     }

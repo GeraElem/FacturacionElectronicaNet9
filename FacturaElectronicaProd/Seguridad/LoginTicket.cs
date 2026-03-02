@@ -75,27 +75,23 @@ namespace FacturaElectronicaProd.Seguridad
             // PASO 3: Invoco al WSAA para obtener el Login Ticket Response
             try
             {
-                WSAA.LoginCMSService servicioWsaa = new WSAA.LoginCMSService();
-                servicioWsaa.Url = argUrlWsaa;
+                var servicioWsaa = new WSAA.LoginCMSClient();
+
                 ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
 
-                // Veo si hay que salir a traves de un proxy
-                if (argProxy != null)
-                {
-                    servicioWsaa.Proxy = new WebProxy(argProxy, true);
-                    if (argProxyUser != null)
-                    {
-                        NetworkCredential Credentials = new NetworkCredential(argProxyUser, argProxyPassword);
-                        servicioWsaa.Proxy.Credentials = Credentials;
-                    }
-                }
-                // guardo el contenido del ticket de acceso con token y sign
-                loginTicketResponse = servicioWsaa.loginCms(cmsFirmadoBase64);
+                var respuesta = servicioWsaa
+                    .loginCmsAsync(cmsFirmadoBase64)
+                    .GetAwaiter()
+                    .GetResult();
 
+                loginTicketResponse = respuesta.loginCmsReturn;
             }
             catch (Exception excepcionAlInvocarWsaa)
             {
-                throw new Exception(ID_FNC + "***Error INVOCANDO al servicio WSAA : " + excepcionAlInvocarWsaa.Message);
+                throw new Exception(
+                    ID_FNC + "***Error INVOCANDO al servicio WSAA : " +
+                    excepcionAlInvocarWsaa.Message
+                );
             }
 
             // PASO 4: Guardo el contenido de la respuesta recibida del WSAA en un objeto XML
