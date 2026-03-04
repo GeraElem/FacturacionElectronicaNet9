@@ -1,61 +1,76 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Security;
-using System.Security.Cryptography;
 using System.Security.Cryptography.Pkcs;
 using System.Security.Cryptography.X509Certificates;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace FacturaElectronicaProd.Seguridad
 {
-    class CertificadosX509Lib
+    internal static class CertificadosX509Lib
     {
-        // Firma mensaje
-        
-        public static byte[] FirmaBytesMensaje(byte[] argBytesMsg, X509Certificate2 argCertFirmante)
+        // ======================================================
+        // FIRMA MENSAJE PKCS#7
+        // ======================================================
+        public static byte[] FirmaBytesMensaje(byte[] mensaje, X509Certificate2 certificadoFirmante)
         {
             const string ID_FNC = "[FirmaBytesMensaje]";
+
             try
             {
-                // Pongo el mensaje en un objeto ContentInfo (requerido para construir el obj SignedCms)
-                ContentInfo infoContenido = new ContentInfo(argBytesMsg);
-                SignedCms cmsFirmado = new SignedCms(infoContenido);
+                if (!certificadoFirmante.HasPrivateKey)
+                {
+                    throw new Exception("El certificado no contiene clave privada.");
+                }
 
-                // Creo objeto CmsSigner que tiene las caracteristicas del firmante
-                CmsSigner cmsFirmante = new CmsSigner(argCertFirmante);
-                cmsFirmante.IncludeOption = X509IncludeOption.EndCertOnly;
+                ContentInfo contentInfo = new ContentInfo(mensaje);
+                SignedCms signedCms = new SignedCms(contentInfo, detached: false);
 
-                // Firmo el mensaje PKCS #7
-                cmsFirmado.ComputeSignature(cmsFirmante);
+                CmsSigner signer = new CmsSigner(certificadoFirmante)
+                {
+                    IncludeOption = X509IncludeOption.EndCertOnly
+                };
 
-                // Encodeo el mensaje PKCS #7.
-                return cmsFirmado.Encode();
+                signedCms.ComputeSignature(signer);
+                return signedCms.Encode();
             }
-            catch (Exception excepcionAlFirmar)
+            catch (Exception ex)
             {
-                throw new Exception(ID_FNC + "***Error al firmar: " + excepcionAlFirmar.Message + excepcionAlFirmar.Data);
+                throw new Exception(
+                    $"{ID_FNC} Error al firmar mensaje: {ex.Message}",
+                    ex
+                );
             }
         }
 
-        // Lee certificado de disco
-        
-        public static X509Certificate2 ObtieneCertificadoDesdeArchivo(string argArchivo)
+        // ======================================================
+        // CARGA CERTIFICADO DESDE ARCHIVO (.p12 / .pfx)
+        // ======================================================
+        public static X509Certificate2 ObtenerCertificadoDesdeArchivo(
+            string rutaCertificado,
+            string password = null)
         {
-            const string ID_FNC = "[ObtieneCertificadoDesdeArchivo]";
-            X509Certificate2 objCert = new X509Certificate2();
+            const string ID_FNC = "[ObtenerCertificadoDesdeArchivo]";
+
             try
             {
-                objCert.Import(argArchivo, "", X509KeyStorageFlags.MachineKeySet);
-                return objCert;
+                if (!System.IO.File.Exists(rutaCertificado))
+                {
+                    throw new Exception("El archivo de certificado no existe.");
+                }
+
+                return new X509Certificate2(
+                    rutaCertificado,
+                    password,
+                    X509KeyStorageFlags.MachineKeySet |
+                    X509KeyStorageFlags.PersistKeySet |
+                    X509KeyStorageFlags.Exportable
+                );
             }
-            catch (Exception excepcionAlImportarCertificado)
+            catch (Exception ex)
             {
-                throw new Exception(ID_FNC + "***Error al leer certificado: " + excepcionAlImportarCertificado.Message + " ---- " + argArchivo);
+                throw new Exception(
+                    $"{ID_FNC} Error al leer certificado: {ex.Message} ---- {rutaCertificado}",
+                    ex
+                );
             }
         }
     }
-
 }

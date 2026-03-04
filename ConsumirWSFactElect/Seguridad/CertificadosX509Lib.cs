@@ -1,61 +1,61 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Security;
-using System.Security.Cryptography;
 using System.Security.Cryptography.Pkcs;
 using System.Security.Cryptography.X509Certificates;
-using System.Text;
-using System.Threading.Tasks;
+using System.Runtime.InteropServices;
 
 namespace ConsumirWSFactElect.Seguridad
 {
     class CertificadosX509Lib
     {
-        // Firma mensaje
-        
+        // 🔐 Firma mensaje
         public static byte[] FirmaBytesMensaje(byte[] argBytesMsg, X509Certificate2 argCertFirmante)
         {
             const string ID_FNC = "[FirmaBytesMensaje]";
             try
             {
-                // Pongo el mensaje en un objeto ContentInfo (requerido para construir el obj SignedCms)
-                ContentInfo infoContenido = new ContentInfo(argBytesMsg);
-                SignedCms cmsFirmado = new SignedCms(infoContenido);
+                var infoContenido = new ContentInfo(argBytesMsg);
+                var cmsFirmado = new SignedCms(infoContenido);
 
-                // Creo objeto CmsSigner que tiene las caracteristicas del firmante
-                CmsSigner cmsFirmante = new CmsSigner(argCertFirmante);
-                cmsFirmante.IncludeOption = X509IncludeOption.EndCertOnly;
+                var cmsFirmante = new CmsSigner(argCertFirmante)
+                {
+                    IncludeOption = X509IncludeOption.EndCertOnly
+                };
 
-                // Firmo el mensaje PKCS #7
                 cmsFirmado.ComputeSignature(cmsFirmante);
-
-                // Encodeo el mensaje PKCS #7.
                 return cmsFirmado.Encode();
             }
-            catch (Exception excepcionAlFirmar)
+            catch (Exception ex)
             {
-                throw new Exception(ID_FNC + "***Error al firmar: " + excepcionAlFirmar.Message + excepcionAlFirmar.Data);
+                throw new Exception(ID_FNC + "***Error al firmar: " + ex.Message, ex);
             }
         }
 
-        // Lee certificado de disco
-        
-        public static X509Certificate2 ObtieneCertificadoDesdeArchivo(string argArchivo)
+        // 📄 Lee certificado .p12 / .pfx (NET 6+ compatible)
+        public static X509Certificate2 ObtieneCertificadoDesdeArchivo(
+            string pathCertificado,
+            string password)
         {
             const string ID_FNC = "[ObtieneCertificadoDesdeArchivo]";
-            X509Certificate2 objCert = new X509Certificate2();
             try
             {
-                objCert.Import(argArchivo);
-                return objCert;
+                var flags =
+                    RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+                        ? X509KeyStorageFlags.MachineKeySet | X509KeyStorageFlags.Exportable
+                        : X509KeyStorageFlags.EphemeralKeySet;
+
+                return new X509Certificate2(
+                    pathCertificado,
+                    password,
+                    flags
+                );
             }
-            catch (Exception excepcionAlImportarCertificado)
+            catch (Exception ex)
             {
-                throw new Exception(ID_FNC + "***Error al leer certificado: " + excepcionAlImportarCertificado.Message);
+                throw new Exception(
+                    ID_FNC + "***Error al leer certificado: " + ex.Message,
+                    ex
+                );
             }
         }
     }
-
 }
