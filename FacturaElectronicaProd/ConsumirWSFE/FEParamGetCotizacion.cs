@@ -3,12 +3,14 @@ using System.Linq;
 using System.Net;
 using System.Globalization;
 using System.ServiceModel;
+using Microsoft.Extensions.Configuration;
+
+using FacturaElectronicaProd.ConsumirWSFE.ClasesRequest;
 using FacturaElectronicaProd.ConsumirWSFE.ClasesResponse;
 using FacturaElectronicaProd.ServiceReference2;
-using Microsoft.Extensions.Configuration;
-using FacturaElectronicaProd.ConsumirWSFE.ClasesRequest;
-using FECotizacionResponse = FacturaElectronicaProd.ConsumirWSFE.ClasesResponse.FECotizacionResponse;
 
+using FECotizacionResponse =
+    FacturaElectronicaProd.ConsumirWSFE.ClasesResponse.FECotizacionResponse;
 
 namespace FacturaElectronicaProd.ConsumirWSFE
 {
@@ -18,12 +20,12 @@ namespace FacturaElectronicaProd.ConsumirWSFE
         private readonly string ambiente;
         private readonly string strUrlWsfev1;
 
-        ServiceSoapClient servicioCompAut;
         private readonly TicketAcceso acceso;
+        private ServiceSoapClient servicioCompAut;
 
-        FEAuthRequest auth;
-        FEParamGetCotizacionResponse response;
-        FECotizacionResponse respuesta;
+        private FEAuthRequest auth;
+        private FEParamGetCotizacionResponse response;
+        private FECotizacionResponse respuesta;
 
         public FEParamGetCotizacion(IConfiguration configuration)
         {
@@ -36,7 +38,6 @@ namespace FacturaElectronicaProd.ConsumirWSFE
                 : "https://wswhomo.afip.gov.ar/wsfev1/service.asmx?WSDL";
 
             acceso = new TicketAcceso(configuration);
-
         }
 
         public FECotizacionResponse ObtenerCotizacion(
@@ -45,11 +46,15 @@ namespace FacturaElectronicaProd.ConsumirWSFE
             string pathXml = null,
             string pathCertificado = null)
         {
-            // Autenticación
+            // ===============================
+            // AUTENTICACIÓN
+            // ===============================
             auth = acceso.ObtenerCredencialesTA(pathXml, pathCertificado);
 
             try
             {
+                ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+
                 var endpoint = new EndpointAddress(strUrlWsfev1);
 
                 servicioCompAut = new ServiceSoapClient(
@@ -57,43 +62,62 @@ namespace FacturaElectronicaProd.ConsumirWSFE
                     endpoint
                 );
 
-                ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
-
                 var fechaTemporal = DateTime.ParseExact(
                     fechaCotiz,
                     "yyyyMMdd",
                     CultureInfo.InvariantCulture
                 );
 
+                int intentos = 0;
+                const int maxIntentos = 10;
+
                 do
                 {
                     response = servicioCompAut
-                        .FEParamGetCotizacionAsync(auth, monId, fechaTemporal.ToString("yyyyMMdd"))
+                        .FEParamGetCotizacionAsync(
+                            auth,
+                            monId,
+                            fechaTemporal.ToString("yyyyMMdd")
+                        )
                         .GetAwaiter()
                         .GetResult();
 
+                    var result = response.Body.FEParamGetCotizacionResult;
+
+                    // ✅ SI HAY RESULTADO, TERMINAMOS
+                    if (result.ResultGet != null)
+                        break;
+
+                    // ❌ SI NO ES ERROR 602, TERMINAMOS
+                    if (result.Errors == null ||
+                        !result.Errors.Any(e => e.Code == 602))
+                        break;
+
+                    // Retrocedemos un día
                     fechaTemporal = fechaTemporal.AddDays(-1);
+                    intentos++;
+
                 }
-                while (
-                    response.Body.FEParamGetCotizacionResult.Errors != null &&
-                    response.Body.FEParamGetCotizacionResult.Errors.Any(e => e.Code == 602)
-                );
+                while (intentos < maxIntentos);
             }
             catch (Exception ex)
             {
                 throw new Exception(
-                    "***Error INVOCANDO FEParamGetCotizacion : " + ex.Message
+                    "***Error INVOCANDO FEParamGetCotizacion : " + ex.Message,
+                    ex
                 );
             }
 
-            // Mapeo de respuesta
+            // ===============================
+            // MAPEO DE RESPUESTA
+            // ===============================
             respuesta = new FECotizacionResponse();
 
-            var result = response.Body.FEParamGetCotizacionResult;
+            var resultado = response.Body.FEParamGetCotizacionResult;
 
-            if (result.Errors != null)
+            if (resultado.Errors != null)
             {
-                respuesta.errores = result.Errors
+                respuesta.errores = resultado.Errors
                     .Select(e => new ErroresResponse
                     {
                         code = e.Code,
@@ -102,9 +126,9 @@ namespace FacturaElectronicaProd.ConsumirWSFE
                     .ToArray();
             }
 
-            if (result.Events != null)
+            if (resultado.Events != null)
             {
-                respuesta.eventos = result.Events
+                respuesta.eventos = resultado.Events
                     .Select(e => new EventosResponse
                     {
                         code = e.Code,
@@ -113,13 +137,13 @@ namespace FacturaElectronicaProd.ConsumirWSFE
                     .ToArray();
             }
 
-            if (result.ResultGet != null)
+            if (resultado.ResultGet != null)
             {
                 respuesta.cotizacion = new CotizacionRequest
                 {
-                    MonId = result.ResultGet.MonId,
-                    MonCotiz = result.ResultGet.MonCotiz,
-                    FchCotiz = result.ResultGet.FchCotiz
+                    MonId = resultado.ResultGet.MonId,
+                    MonCotiz = resultado.ResultGet.MonCotiz,
+                    FchCotiz = resultado.ResultGet.FchCotiz
                 };
             }
 

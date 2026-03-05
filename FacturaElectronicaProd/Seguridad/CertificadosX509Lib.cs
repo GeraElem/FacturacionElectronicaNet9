@@ -59,8 +59,8 @@ namespace FacturaElectronicaProd.Seguridad
                 return new X509Certificate2(
                     rutaCertificado,
                     password,
-                    X509KeyStorageFlags.MachineKeySet |
-                    X509KeyStorageFlags.PersistKeySet |
+                    X509KeyStorageFlags.UserKeySet |
+                    X509KeyStorageFlags.EphemeralKeySet |
                     X509KeyStorageFlags.Exportable
                 );
             }

@@ -3,6 +3,8 @@ using System.Net;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Xml;
+using System.Threading;
+using System.Runtime.CompilerServices;
 
 namespace FacturaElectronicaProd.Seguridad
 {
@@ -31,12 +33,9 @@ namespace FacturaElectronicaProd.Seguridad
             string servicio,
             string urlWsaa,
             string rutaCertificadoP12,
-            string passwordCertificado = null,
-            object value = null,
-            object value1 = null)
+            string passwordCertificado = "")
         {
             const string ID_FNC = "[ObtenerLoginTicketResponse]";
-
             string cmsFirmadoBase64;
             string loginTicketResponseXml;
 
@@ -45,19 +44,21 @@ namespace FacturaElectronicaProd.Seguridad
                 // ======================================================
                 // PASO 1: CREAR LOGIN TICKET REQUEST
                 // ======================================================
-                _globalUniqueID++;
+                uint uniqueId = (uint)Interlocked.Increment(ref Unsafe.As<uint, int>(ref _globalUniqueID));
 
                 XmlLoginTicketRequest = new XmlDocument();
                 XmlLoginTicketRequest.LoadXml(XmlTemplate);
 
                 XmlLoginTicketRequest.SelectSingleNode("//uniqueId")!.InnerText =
-                    _globalUniqueID.ToString();
+                    uniqueId.ToString();
+
+                var now = DateTime.Now;
 
                 XmlLoginTicketRequest.SelectSingleNode("//generationTime")!.InnerText =
-                    DateTime.UtcNow.AddMinutes(-10).ToString("yyyy-MM-ddTHH:mm:ss");
+                    now.AddMinutes(-5).ToString("s");
 
                 XmlLoginTicketRequest.SelectSingleNode("//expirationTime")!.InnerText =
-                    DateTime.UtcNow.AddMinutes(10).ToString("yyyy-MM-ddTHH:mm:ss");
+                    now.AddMinutes(5).ToString("s");
 
                 XmlLoginTicketRequest.SelectSingleNode("//service")!.InnerText =
                     servicio;
@@ -80,8 +81,13 @@ namespace FacturaElectronicaProd.Seguridad
                 X509Certificate2 certificado = CertificadosX509Lib
                     .ObtenerCertificadoDesdeArchivo(
                         rutaCertificadoP12,
-                        passwordCertificado
+                        passwordCertificado ?? ""
                     );
+
+                if (!certificado.HasPrivateKey)
+                {
+                    throw new Exception("El certificado no contiene clave privada.");
+                }
 
                 byte[] xmlBytes = Encoding.UTF8.GetBytes(
                     XmlLoginTicketRequest.OuterXml

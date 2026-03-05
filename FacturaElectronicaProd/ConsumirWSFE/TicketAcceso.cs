@@ -118,8 +118,6 @@ namespace FacturaElectronicaProd.ConsumirWSFE
                 servicio,
                 urlWsaa,
                 certificado,
-                null,
-                null,
                 null);
 
             xmlTicket.Save(archivo);
