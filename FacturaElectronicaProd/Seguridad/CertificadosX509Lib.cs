@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Security.Cryptography.Pkcs;
 using System.Security.Cryptography.X509Certificates;
+using System.ServiceModel;
 
 namespace FacturaElectronicaProd.Seguridad
 {
@@ -58,11 +59,7 @@ namespace FacturaElectronicaProd.Seguridad
 
                 return new X509Certificate2(
                     rutaCertificado,
-                    password,
-                    X509KeyStorageFlags.UserKeySet |
-                    X509KeyStorageFlags.EphemeralKeySet |
-                    X509KeyStorageFlags.Exportable
-                );
+                    password);
             }
             catch (Exception ex)
             {

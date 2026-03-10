@@ -118,7 +118,7 @@ namespace FacturaElectronicaProd.ConsumirWSFE
                 servicio,
                 urlWsaa,
                 certificado,
-                null);
+                "1");
 
             xmlTicket.Save(archivo);
         }
